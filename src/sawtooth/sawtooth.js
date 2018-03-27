@@ -6,17 +6,17 @@
  * @file, definition of the Sawtooth class, which implements the caliper's NBI for hyperledger sawtooth lake
  */
 
-
-'use strict'
-
-var BlockchainInterface = require('../comm/blockchain-interface.js')
+"use strict";
+var fs = require("fs");
+var BlockchainInterface = require("../comm/blockchain-interface.js");
 class Sawtooth extends BlockchainInterface {
 	constructor(config_path) {
-		 super(config_path);
+		super(config_path);
+		this.config = JSON.parse(fs.readFileSync(this.configPath, "utf8"));
 	}
 
 	gettype() {
-		return 'sawtooth';
+		return "sawtooth";
 	}
 
 	init() {
@@ -31,235 +31,304 @@ class Sawtooth extends BlockchainInterface {
 
 	getContext(name, args) {
 		return Promise.resolve();
-
 	}
 
 	releaseContext(context) {
-        // todo:
+		// todo:
 		return Promise.resolve();
 	}
 
 	invokeSmartContract(context, contractID, contractVer, args, timeout) {
-		const address = calculateAddresses(contractID, args)
-		let sawtoothContractVersion = '1.0'
-			if (contractVer === 'v0') {
-				sawtoothContractVersion = '1.0'
-			}
-		const batchBytes = createBatch(contractID, sawtoothContractVersion, address, args)
-		return submitBatches(batchBytes)
+		const address = calculateAddresses(contractID, args);
+		let sawtoothContractVersion = "1.0";
+		if (contractVer === "v0") {
+			sawtoothContractVersion = "1.0";
+		}
+		const batchBytes = createBatch(
+			contractID,
+			sawtoothContractVersion,
+			address,
+			args
+		);
+		return submitBatches(batchBytes, this.config.sawtooth.network.restapi.url);
 	}
 
 	queryState(context, contractID, contractVer, queryName) {
-		let sawtoothContractVersion = '1.0'
-			if (contractVer === 'v0') {
-				sawtoothContractVersion = '1.0'
-			}
-		return querybycontext(context, contractID, contractVer, queryName)
+		let sawtoothContractVersion = "1.0";
+		if (contractVer === "v0") {
+			sawtoothContractVersion = "1.0";
+		}
+		return querybycontext(
+			context,
+			contractID,
+			contractVer,
+			queryName,
+			this.config.sawtooth.network.restapi.url
+		);
 	}
 
 	getDefaultTxStats(stats, results) {
-        // nothing to do now
+		// nothing to do now
 	}
 }
 
 module.exports = Sawtooth;
 
-const restApiUrl = 'http://127.0.0.1:8080'
+// const restApiUrl = "http://127.0.0.1:8080";
 
-	function querybycontext(context, contractID, contractVer, name) {
-	const address = calculateAddress(contractID, name)
-	return getState(address)
+function querybycontext(context, contractID, contractVer, name, restApiUrl) {
+	const address = calculateAddress(contractID, name);
+	return getState(address, restApiUrl);
 }
 
-function getState(address) {
+function getState(address, restApiUrl) {
 	var invoke_status = {
-			status       : 'created',
-			time_create  : Date.now(),
-			time_final   : 0,
-			result       : null
+		status: "created",
+		time_create: Date.now(),
+		time_final: 0,
+		result: null
 	};
 
-	const stateLink = restApiUrl + '/state?address=' + address
+	const stateLink = restApiUrl + "/state?address=" + address;
 	var options = {
-			uri: stateLink
-	}
+		uri: stateLink
+	};
 	return request(options)
-	.then(function(body) {
-		let data = (JSON.parse(body))["data"]
+		.then(function(body) {
+			let data = JSON.parse(body)["data"];
 
-		if (data.length > 0) {
-			let stateDataBase64 = data[0]["data"]
-			let stateDataBuffer = new Buffer(stateDataBase64, 'base64')
-			let stateData = stateDataBuffer.toString('hex')
+			if (data.length > 0) {
+				let stateDataBase64 = data[0]["data"];
+				let stateDataBuffer = new Buffer(stateDataBase64, "base64");
+				let stateData = stateDataBuffer.toString("hex");
 
-			invoke_status.time_final = Date.now();
-			invoke_status.result     = stateData;
-			invoke_status.status     = 'success';
+				invoke_status.time_final = Date.now();
+				invoke_status.result = stateData;
+				invoke_status.status = "success";
+				return Promise.resolve(invoke_status);
+			} else {
+				throw new Error("no query responses");
+			}
+		})
+		.catch(function(err) {
+			console.log("Query failed, " + (err.stack ? err.stack : err));
 			return Promise.resolve(invoke_status);
-		}
-		else {
-			throw new Error('no query responses');
-		}
-	})
-	.catch(function (err) {
-		console.log('Query failed, ' + (err.stack?err.stack:err));
-		return Promise.resolve(invoke_status);
-	})
+		});
 }
 
 function sleep(ms) {
 	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function submitBatches(batchBytes) {
+function submitBatches(batchBytes, restApiUrl) {
 	var invoke_status = {
-		id           : 0,
-		status       : 'created',
-		time_create  : Date.now(),
-		time_final   : 0,
-		time_endorse : 0,
-		time_order   : 0,
-		result       : null
+		id: 0,
+		status: "created",
+		time_create: Date.now(),
+		time_final: 0,
+		time_endorse: 0,
+		time_order: 0,
+		result: null
 	};
-	const request = require('request-promise')
+	const request = require("request-promise");
 	var options = {
-		method: 'POST',
-		url: restApiUrl + '/batches',
+		method: "POST",
+		url: restApiUrl + "/batches",
 		body: batchBytes,
-		headers: {'Content-Type': 'application/octet-stream'}
-	}
-	return request(options)	
-	.then(function (body) {
-		let link = JSON.parse(body).link
-		return getBatchStatus(link, invoke_status)
-	})
-	.catch(function (err) {
-		console.log('Submit batches failed, ' + (err.stack?err.stack:err))
-		return Promise.resolve(invoke_status);
-	})
+		headers: { "Content-Type": "application/octet-stream" }
+	};
+	return request(options)
+		.then(function(body) {
+			let link = JSON.parse(body).link;
+			return getBatchStatus(link, invoke_status);
+		})
+		.catch(function(err) {
+			console.log("Submit batches failed, " + (err.stack ? err.stack : err));
+			return Promise.resolve(invoke_status);
+		});
 }
 
-var getIndex = 0
+var getIndex = 0;
 function getBatchStatus(link, invoke_status) {
-	getIndex++
-	let statusLink = link
-	var intervalID = 0
-	var timeoutID = 0
+	getIndex++;
+	let statusLink = link;
+	var intervalID = 0;
+	var timeoutID = 0;
 
 	var repeat = (ms, invoke_status) => {
-		return new Promise((resolve) => {
-			intervalID = setInterval(function(){					
-				return getBatchStatusByRequest(resolve, statusLink, invoke_status, intervalID, timeoutID)
-			}, ms)
-
-		})
-	}
+		return new Promise(resolve => {
+			intervalID = setInterval(function() {
+				return getBatchStatusByRequest(
+					resolve,
+					statusLink,
+					invoke_status,
+					intervalID,
+					timeoutID
+				);
+			}, ms);
+		});
+	};
 
 	var timeout = (ms, invoke_status) => {
-		return new Promise((resolve) => {
-			timeoutID = setTimeout(function(){
-				clearInterval(intervalID )
+		return new Promise(resolve => {
+			timeoutID = setTimeout(function() {
+				clearInterval(intervalID);
 				return resolve(invoke_status);
-			}, ms)
+			}, ms);
+		});
+	};
+
+	return Promise.race([
+		repeat(500, invoke_status),
+		timeout(30000, invoke_status)
+	])
+		.then(function() {
+			return Promise.resolve(invoke_status);
 		})
-	}
-
-
-	return  Promise.race([repeat(500, invoke_status), timeout(30000, invoke_status)])
-	.then(function () {
-		return Promise.resolve(invoke_status);
-	})
-	.catch(function(error) {
-		console.log('getBatchStatus error: ' + error)
-		return Promise.resolve(invoke_status);
-	})
+		.catch(function(error) {
+			console.log("getBatchStatus error: " + error);
+			return Promise.resolve(invoke_status);
+		});
 }
 
-var timeoutID = 0
-const request = require('request-promise')
-var requestIndex = 0
+var timeoutID = 0;
+const request = require("request-promise");
+var requestIndex = 0;
 
-function getBatchStatusByRequest(resolve, statusLink, invoke_status, intervalID, timeoutID) {
-	requestIndex++
+function getBatchStatusByRequest(
+	resolve,
+	statusLink,
+	invoke_status,
+	intervalID,
+	timeoutID
+) {
+	requestIndex++;
 	var options = {
 		uri: statusLink
-	}
+	};
 	return request(options)
-	.then(function(body) {
-		let batchStatuses = JSON.parse(body).data
-		let hasPending = false
-		for (let index in batchStatuses){
-			let batchStatus = batchStatuses[index].status
-			if (batchStatus == 'PENDING'){
-				hasPending = true
-				break
+		.then(function(body) {
+			let batchStatuses = JSON.parse(body).data;
+			let hasPending = false;
+			for (let index in batchStatuses) {
+				let batchStatus = batchStatuses[index].status;
+				if (batchStatus == "PENDING") {
+					hasPending = true;
+					break;
+				}
 			}
-		}
-		if (hasPending != true){
-			invoke_status.status = 'success';
-			invoke_status.time_final = Date.now();
-			clearInterval(intervalID)
-			clearTimeout(timeoutID)
+			if (hasPending != true) {
+				invoke_status.status = "success";
+				invoke_status.time_final = Date.now();
+				clearInterval(intervalID);
+				clearTimeout(timeoutID);
+				return resolve(invoke_status);
+			}
+		})
+		.catch(function(err) {
+			console.log(err);
 			return resolve(invoke_status);
-		}
-	})
-	.catch(function (err) {
-		console.log(err)
-		return resolve(invoke_status);
-	})
+		});
 }
 
 function calculateAddress(family, name) {
+	const crypto = require("crypto");
 
-	const crypto = require('crypto')
+	const _hash = x =>
+		crypto
+			.createHash("sha512")
+			.update(x)
+			.digest("hex")
+			.toLowerCase();
 
-	const _hash = (x) =>
-	crypto.createHash('sha512').update(x).digest('hex').toLowerCase()
-
-	const INT_KEY_NAMESPACE = _hash(family).substring(0, 6)
-	let address = INT_KEY_NAMESPACE + _hash(name).slice(-64)
-	return address
+	const INT_KEY_NAMESPACE = _hash(family).substring(0, 6);
+	let address = INT_KEY_NAMESPACE + _hash(name).slice(-64);
+	return address;
 }
 
 function calculateAddresses(family, args) {
-	const crypto = require('crypto')
+	const crypto = require("crypto");
 
-	const _hash = (x) =>
-	crypto.createHash('sha512').update(x).digest('hex').toLowerCase()
+	const _hash = x =>
+		crypto
+			.createHash("sha512")
+			.update(x)
+			.digest("hex")
+			.toLowerCase();
 
-	const INT_KEY_NAMESPACE = _hash(family).substring(0, 6)
-	let addresses = []
+	const INT_KEY_NAMESPACE = _hash(family).substring(0, 6);
+	let addresses = [];
 
-	for (let key in args){
-	    let address = INT_KEY_NAMESPACE + _hash(args[key]).slice(-64)
-		addresses.push(address)
+	for (let key in args) {
+		let address = INT_KEY_NAMESPACE + _hash(args[key]).slice(-64);
+		addresses.push(address);
 	}
-	return addresses
+	return addresses;
 }
 
 function createBatch(contractID, contractVer, addresses, args) {
-	const cbor =  require('cbor')
-	const {signer} = require('sawtooth-sdk')
-	const privateKey = signer.makePrivateKey()
-	const {TransactionEncoder} = require('sawtooth-sdk')
+	const cbor = require("cbor");
+	const { createHash } = require("crypto");
+	const { protobuf } = require("sawtooth-sdk");
+	const { createContext, CryptoFactory } = require("sawtooth-sdk/signing");
+	const context = createContext("secp256k1");
+	const privateKey = context.newRandomPrivateKey();
+	const signer = new CryptoFactory(context).newSigner(privateKey);
 
+	const payload = {
+		Verb: "set",
+		Name: "foo",
+		Value: 42
+	};
 
-	const encoder = new TransactionEncoder(privateKey, {
+	const payloadBytes = cbor.encode(payload);
+
+	const transactionHeaderBytes = protobuf.TransactionHeader.encode({
 		familyName: contractID,
 		familyVersion: contractVer,
 		inputs: addresses,
 		outputs: addresses,
-		payloadEncoding: 'application/cbor',
-		payloadEncoder: cbor.encode
-	})
+		signerPublicKey: signer.getPublicKey().asHex(),
+		// In this example, we're signing the batch with the same private key,
+		// but the batch can be signed by another party, in which case, the
+		// public key will need to be associated with that key.
+		batcherPublicKey: signer.getPublicKey().asHex(),
+		// In this example, there are no dependencies.  This list should include
+		// an previous transaction header signatures that must be applied for
+		// this transaction to successfully commit.
+		// For example,
+		// dependencies: ['540a6803971d1880ec73a96cb97815a95d374cbad5d865925e5aa0432fcf1931539afe10310c122c5eaae15df61236079abbf4f258889359c4d175516934484a'],
+		dependencies: [],
+		payloadSha512: createHash("sha512")
+			.update(payloadBytes)
+			.digest("hex")
+	}).finish();
 
-	const txn = encoder.create(args)
+	const transaction = protobuf.Transaction.create({
+		header: transactionHeaderBytes,
+		headerSignature: signer.sign(transactionHeaderBytes),
+		payload: payloadBytes
+	});
 
-	const {BatchEncoder} = require('sawtooth-sdk')
-	const batcher = new BatchEncoder(privateKey)
+	const transactions = [transaction];
 
-	const batch = batcher.create([txn])
-	let link = restApiUrl + '/batch_status?id=' + batch.headerSignature 
-	const batchBytes = batcher.encode([batch])
-	return batchBytes
+	const batchHeaderBytes = protobuf.BatchHeader.encode({
+		signerPublicKey: signer.getPublicKey().asHex(),
+		transactionIds: transactions.map(txn => txn.headerSignature)
+	}).finish();
+
+	const batch = protobuf.Batch.create({
+		header: batchHeaderBytes,
+		headerSignature: signer.sign(batchHeaderBytes),
+		transactions: transactions
+	});
+
+	const batchListBytes = protobuf.BatchList.encode({
+		batches: [batch]
+	}).finish();
+
+	return batchListBytes;
+	// const batchBytes = protobuf.TransactionList.encode([transaction]).finish();
+
+	// return batchBytes;
 }

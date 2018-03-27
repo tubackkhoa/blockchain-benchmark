@@ -18,31 +18,25 @@ version: "2.1"
 services:
 
   settings-tp:
-    image: hyperledger/sawtooth-tp_settings:latest
-    container_name: sawtooth-settings-tp-default
-    expose:
-      - 4004
+    image: hyperledger/sawtooth-settings-tp:latest
+    container_name: sawtooth-settings-tp-default    
     depends_on:
       - validator
-    entrypoint: settings-tp -vv tcp://validator:4004
+    entrypoint: settings-tp -vv -C tcp://validator:4004
 
   intkey-tp-python:
-    image: hyperledger/sawtooth-tp_intkey_python:latest
+    image: hyperledger/sawtooth-intkey-tp-python:latest
     container_name: sawtooth-intkey-tp-python-default
-    expose:
-      - 4004
     depends_on:
       - validator
-    entrypoint: intkey-tp-python -vv tcp://validator:4004
+    entrypoint: intkey-tp-python -vv -C tcp://validator:4004
 
   xo-tp-python:
-    image: hyperledger/sawtooth-tp_xo_python:latest
+    image: hyperledger/sawtooth-xo-tp-python:latest
     container_name: sawtooth-xo-tp-python-default
-    expose:
-      - 4004
     depends_on:
       - validator
-    entrypoint: xo-tp-python -vv tcp://validator:4004
+    entrypoint: xo-tp-python -vv -C tcp://validator:4004
 
   validator:
     image: hyperledger/sawtooth-validator:latest
@@ -53,10 +47,10 @@ services:
       - "34004:4004"
     # start the validator with an empty genesis batch
     entrypoint: "bash -c \"\
-        sawtooth admin keygen --force && \
+        sawadm keygen --force && \
         sawtooth keygen my_key --force && \
-        sawtooth config genesis -k /root/.sawtooth/keys/my_key.priv && \
-        sawtooth admin genesis config-genesis.batch && \
+        sawset genesis -k /root/.sawtooth/keys/my_key.priv && \
+        sawadm genesis config-genesis.batch && \
         sawtooth-validator -vv \
           --endpoint tcp://validator:8800 \
           --bind component:tcp://eth0:4004 \
@@ -71,7 +65,7 @@ services:
     depends_on:
       - validator
     command: "bash -c \"\
-        sawtooth admin keygen --force && \
+        sawadm keygen --force && \
         sawtooth-validator -v \
           --endpoint tcp://validator-1:8800 \
           --peers tcp://validator:8800 \
@@ -93,7 +87,7 @@ services:
       - validator
       - validator-1
     command: "bash -c \"\
-        sawtooth admin keygen --force && \
+        sawadm keygen --force && \
         sawtooth-validator -v \
           --endpoint tcp://validator-2:8800 \
           --peers tcp://validator:8800,tcp://validator-1:8800
