@@ -9,6 +9,11 @@
 "use strict";
 var fs = require("fs");
 var BlockchainInterface = require("../comm/blockchain-interface.js");
+const {
+	calculateAddress,
+	calculateAddresses
+} = require("../../lib/sawtooth/address");
+
 class Sawtooth extends BlockchainInterface {
 	constructor(config_path) {
 		super(config_path);
@@ -233,41 +238,6 @@ function getBatchStatusByRequest(
 			console.log(err);
 			return resolve(invoke_status);
 		});
-}
-
-function calculateAddress(family, name) {
-	const crypto = require("crypto");
-
-	const _hash = x =>
-		crypto
-			.createHash("sha512")
-			.update(x)
-			.digest("hex")
-			.toLowerCase();
-
-	const INT_KEY_NAMESPACE = _hash(family).substring(0, 6);
-	let address = INT_KEY_NAMESPACE + _hash(name).slice(-64);
-	return address;
-}
-
-function calculateAddresses(family, args) {
-	const crypto = require("crypto");
-
-	const _hash = x =>
-		crypto
-			.createHash("sha512")
-			.update(x)
-			.digest("hex")
-			.toLowerCase();
-
-	const INT_KEY_NAMESPACE = _hash(family).substring(0, 6);
-	let addresses = [];
-
-	for (let key in args) {
-		let address = INT_KEY_NAMESPACE + _hash(args[key]).slice(-64);
-		addresses.push(address);
-	}
-	return addresses;
 }
 
 function createBatch(contractID, contractVer, addresses, args) {
