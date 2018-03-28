@@ -50,6 +50,7 @@ class Sawtooth extends BlockchainInterface {
 			address,
 			args
 		);
+		// console.log(contractID, sawtoothContractVersion, address, args);
 		return submitBatches(batchBytes, this.config.sawtooth.network.restapi.url);
 	}
 
@@ -95,6 +96,7 @@ function getState(address, restApiUrl) {
 	};
 	return request(options)
 		.then(function(body) {
+			// console.log("Get Body from state: " + body);
 			let data = JSON.parse(body)["data"];
 
 			if (data.length > 0) {
@@ -139,6 +141,7 @@ function submitBatches(batchBytes, restApiUrl) {
 	};
 	return request(options)
 		.then(function(body) {
+			// console.log("Got Body: " + body);
 			let link = JSON.parse(body).link;
 			return getBatchStatus(link, invoke_status);
 		})
@@ -209,6 +212,7 @@ function getBatchStatusByRequest(
 	return request(options)
 		.then(function(body) {
 			let batchStatuses = JSON.parse(body).data;
+			// console.log("Got Status: " + JSON.stringify(batchStatuses));
 			let hasPending = false;
 			for (let index in batchStatuses) {
 				let batchStatus = batchStatuses[index].status;
@@ -275,13 +279,7 @@ function createBatch(contractID, contractVer, addresses, args) {
 	const privateKey = context.newRandomPrivateKey();
 	const signer = new CryptoFactory(context).newSigner(privateKey);
 
-	const payload = {
-		Verb: "set",
-		Name: "foo",
-		Value: 42
-	};
-
-	const payloadBytes = cbor.encode(payload);
+	const payloadBytes = cbor.encode(args);
 
 	const transactionHeaderBytes = protobuf.TransactionHeader.encode({
 		familyName: contractID,
@@ -326,6 +324,10 @@ function createBatch(contractID, contractVer, addresses, args) {
 	const batchListBytes = protobuf.BatchList.encode({
 		batches: [batch]
 	}).finish();
+
+	// const fileStream = fs.createWriteStream("/tmp/intkey.batches");
+	// fileStream.write(batchListBytes);
+	// fileStream.end();
 
 	return batchListBytes;
 	// const batchBytes = protobuf.TransactionList.encode([transaction]).finish();

@@ -47,8 +47,8 @@ services:
       - "34004:4004"
     # start the validator with an empty genesis batch
     entrypoint: "bash -c \"\
-        sawadm keygen --force && \
-        sawtooth keygen my_key --force && \
+        sawadm keygen && \
+        sawtooth keygen my_key && \
         sawset genesis -k /root/.sawtooth/keys/my_key.priv && \
         sawadm genesis config-genesis.batch && \
         sawtooth-validator -vv \
@@ -103,12 +103,19 @@ services:
   rest-api:
     image: hyperledger/sawtooth-rest_api:latest
     container_name: sawtooth-rest-api-default
-    expose:
-      - 4004
-      - 8080
     ports:
       - "38080:8080"
     depends_on:
       - validator
-    entrypoint: sawtooth-rest-api --connect tcp://validator:4004 --bind rest-api:8080
+    entrypoint: sawtooth-rest-api -C tcp://validator:4004 --bind rest-api:8080
+
+  shell:
+    image: hyperledger/sawtooth-all:latest
+    container_name: sawtooth-shell-default
+    depends_on:
+      - rest-api
+    entrypoint: "bash -c \"\
+        sawtooth keygen && \
+        tail -f /dev/null \
+        \""
 
